@@ -2,12 +2,21 @@
 #include <png++/png.hpp>
 #include <sstream>
 
+/**
+ * Logistic function to increase contrast in image.
+ */
 double sigmoid(double x, double amount) {
     return 1.0 / (1.0 + std::exp(-(x - 0.5) * amount));
 }
 
+/**
+ * Increase x while smoothly avoiding saturating values that are close to 1.
+ * This function behaves like a linear function for small values of x close to
+ * 0, but plateaus out for large values of x.
+ * The m parameter adjusts the slope.
+ * The k parameter adjusts how "sharp" the kink at the plateau is.
+ */
 double brighten(double x, double m = 2.0, double k = 15) {
-    const double amount = 1.2;
     const double x0 = -std::log(std::expm1(k / m));
     x = 1 - (m / k) * std::log1p(std::exp(-k * x - x0));
     return x;

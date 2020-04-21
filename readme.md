@@ -1,13 +1,19 @@
 High resolution Buddhabrot generator
 ====================================
 
+Generates high resolution pictures of the [Buddhabrot](https://en.wikipedia.org/wiki/Buddhabrot) using standard modern C++ with very few dependencies.
+
 ![pic](https://pics.dllu.net/file/dllu-pics/cubehelix_buddhabrot_512_16384_2000_1024.png)
 
-Requirements:
+16384 x 16384 version: [**large 95 MiB file**](https://pics.dllu.net/file/dllu-pics/cubehelix_buddhabrot_16384_2000_1024.png)
+
+### Requirements
 
 * [`png++`](https://www.nongnu.org/pngpp/)
 
 # Building
+
+On UNIX-like systems,
 
 ```
 g++ -Ofast -march=native -lpng -lpthread -o buddhabrot buddhabrot.cpp
@@ -78,7 +84,7 @@ Hence, we use a crude version of _importance sampling_.
 
 For a given region, we can estimate how likely it to be interesting by starting out with very few random samples. If these early samples all turn out to be boring (e.g. if all of them fail to escape), then we can terminate the sampling immediately.
 
-However, if they do escape, we can look at how fast they escape. If they escape really quickly, then it is kind of boring too, so we can terminate after a few samples. But if some of them take a long time to escape, then these are interesting trajectorys, so we will increase the number of samples accordingly.
+However, if they do escape, we can look at how fast they escape. If they escape really quickly, then it is kind of boring too, so we can terminate after a few samples. But if some of them take a long time to escape, then these are interesting trajectories, so we will increase the number of samples accordingly.
 
 Another note is that the most interesting samples tend to happen on the edges of the Mandelbrot set, so if we find that, for a given region, some points escape and some don't, then this is a good indicator that it is on the edge and therefore supremely interesting indeed.
 
