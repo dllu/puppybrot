@@ -8,8 +8,8 @@
 #include <thread>
 
 using idx = std::ptrdiff_t;
-using pt = std::complex<double>;
-using px = std::pair<idx, idx>;
+using pt = std::complex<double>;  // a point in real life
+using px = std::pair<idx, idx>;   // pixel in the image
 
 class buddhabrot {
    public:
@@ -19,15 +19,24 @@ class buddhabrot {
    private:
     static constexpr double escape_radius2 = 8.0;
     const idx iterations;
-    const idx trials_count;
+    const idx max_samples;
+    const idx stride;
+    const idx stride_offset;
     std::vector<std::vector<double>> image;
-    std::vector<pt> buf;
+    std::vector<std::vector<pt>> buf;
+    std::vector<idx> buflen;
     std::mt19937 engine;
 
+    /**
+     * struct to represent a bounding box
+     */
     struct bounds {
         double ulo, uhi, vlo, vhi;
     };
 
+    /**
+     * sample a random point within bounding box
+     */
     pt random_pt(const bounds& bb) {
         std::uniform_real_distribution<double> uniform_dist_real(bb.ulo,
                                                                  bb.uhi);
@@ -36,90 +45,111 @@ class buddhabrot {
         return pt(uniform_dist_real(engine), uniform_dist_imag(engine));
     }
 
-    px to_px(pt z) {
+    /**
+     * convert point to pixel
+     */
+    px to_px(const pt z) {
         return std::make_pair(
-            static_cast<idx>(std::lround(image_height * (z.real() + 2) / 4)),
+            static_cast<idx>(image_height * (z.real() + 2) / 4),
             static_cast<idx>(image_width * (z.imag() + 2) / 4));
     }
 
+    /**
+     * convert pixel to point
+     */
+    pt to_pt(const px x) {
+        return pt(x.first * 4.0 / image_height - 2.0,
+                  x.second * 4.0 / image_width - 2.0);
+    }
+
+    /**
+     * check if a pixel is within bounds of the image
+     */
     bool in_bounds(px y) {
         return y.first >= 0 && y.second >= 0 && y.first < image_height &&
                y.second < image_width;
     }
 
-    bool render_region(const bounds& bb, const double weight, const idx depth,
-                       const bool write = true) {
-        bool escaped = false;
-        bool noescape = false;
-        idx max_escaped_time = 0;
-        const idx trials = weight == 0 ? trials_count / 4.0 : trials_count;
-        if (weight == 0 && bb.uhi - bb.ulo <= 1e-5) return false;
-        for (idx trial = 0; trial < trials; trial++) {
+    /**
+     * Render a region within bounding box
+     *
+     * This is an adaptive sampling algorithm that uses importance sampling.
+     * The importance of the box is assumed to be 10 * the max path length
+     * originating from a point in the region.
+     *
+     * As we continue to sample, we keep updating the importance of the region
+     * as needed.
+     *
+     * For example, for points in the Mandelbrot set, after 5 samples, it will
+     * immediately terminate. However, interesting points tend to be on the
+     * edges of the set. So, cells that contain points both in and out of the
+     * Mandelbrot set will be considered to have maximum importance.
+     */
+    void render_region(const bounds& bb) {
+        idx samples = 5;
+        idx max_path = -1;
+        for (idx trial = 0; trial < samples; trial++) {
             auto c = random_pt(bb);
             pt z(0, 0);
             idx escaped_time = 0;
             for (idx i = 0; i < iterations; i++) {
                 z = z * z + c;
-                buf[i] = z;
+                buf[trial][i] = z;
                 if (z.imag() * z.imag() + z.real() * z.real() >
                     escape_radius2) {
                     escaped_time = i;
-                    escaped = true;
                     break;
                 }
             }
-            if (escaped_time != 0) {
-                if (write) {
-                    for (idx i = 0; i < escaped_time; i++) {
-                        px y = to_px(buf[i]);
-                        if (in_bounds(y)) image[y.first][y.second] += trials;
-                    }
-                }
-                max_escaped_time = std::max(max_escaped_time, escaped_time);
-                escaped = true;
-            } else {
-                noescape = true;
-            }
-            if (weight == 0 &&
-                ((bb.uhi - bb.ulo > 1e-5) &&
-                 ((escaped && noescape) || (max_escaped_time > depth)))) {
-                return true;
-            }
-        }
-        return (bb.uhi - bb.ulo > 1e-5) &&
-               ((escaped && noescape) || (max_escaped_time > depth));
-    }
 
-    void render_recurse(const bounds& bb = {-2.0, 2.0, -2.0, 2.0},
-                        const double weight = image_width * image_height,
-                        const idx depth = 1) {
-        if (depth > 1024 && !render_region(bb, 0, depth, false)) {
-            render_region(bb, weight, depth);
-            return;
-        }
-        for (const bounds& qb : quadrants(bb)) {
-            render_recurse(qb, weight / 4.0, depth * 2);
-        }
-    }
+            // the longer the path, the higher the importance.
+            if (escaped_time > max_path) {
+                max_path = escaped_time;
+                samples = std::max(
+                    samples,
+                    std::min(max_samples, 5 + 2 * max_path * max_path));
+            }
 
-    std::array<bounds, 4> quadrants(const bounds& bb) {
-        double umid = (bb.ulo + bb.uhi) / 2;
-        double vmid = (bb.vlo + bb.vhi) / 2;
-        return {bounds{umid, bb.uhi, vmid, bb.vhi},
-                bounds{umid, bb.uhi, bb.vlo, vmid},
-                bounds{bb.ulo, umid, vmid, bb.vhi},
-                bounds{bb.ulo, umid, bb.vlo, vmid}};
+            // if we encounter the edge of the mandelbrot set, we treat this as
+            // the maximum importance.
+            if ((escaped_time == 0 && max_path > 0) ||
+                (escaped_time != 0 && max_path == -1)) {
+                samples = max_samples;
+            }
+
+            buflen[trial] = escaped_time;
+        }
+
+        const double weight = 1.0 / samples;
+        for (idx trial = 0; trial < samples; trial++) {
+            for (idx i = 0; i < buflen[trial]; i++) {
+                px y = to_px(buf[trial][i]);
+                if (in_bounds(y)) image[y.first][y.second] += weight;
+            }
+        }
     }
 
    public:
-    buddhabrot(idx iterations_, idx trials_count_, idx seed)
+    buddhabrot(const idx iterations_, const idx max_samples_, const idx seed,
+               const idx stride_ = 1, const idx stride_offset_ = 0)
         : iterations(iterations_),
-          trials_count(trials_count_),
+          max_samples(max_samples_),
+          stride(stride_),
+          stride_offset(stride_offset_),
           image(image_height, std::vector<double>(image_width, 0)),
-          buf(iterations),
+          buf(max_samples, std::vector<pt>(iterations)),
+          buflen(max_samples),
           engine(seed) {}
 
-    void render() { render_recurse(); }
+    void render() {
+        for (idx u = stride_offset; u < image_height; u += stride) {
+            for (idx v = 0; v < image_width; v++) {
+                pt a = to_pt(std::make_pair(u, v));
+                pt b = to_pt(std::make_pair(u + 1, v + 1));
+                render_region(bounds{a.real(), b.real(), a.imag(), b.imag()});
+            }
+        }
+    }
 
     double operator()(idx u, idx v) const { return image[u][v]; }
 };
@@ -127,11 +157,15 @@ class buddhabrot {
 void write(const std::string& filename,
            const std::vector<std::unique_ptr<buddhabrot>>& brots) {
     double max_val = 0;
+    double min_val = std::numeric_limits<double>::infinity();
     for (idx u = 0; u < buddhabrot::image_height; u++) {
         for (idx v = 0; v < buddhabrot::image_width; v++) {
             double x = 0;
             for (auto& b : brots) {
                 x += (*b)(u, v);
+            }
+            if (x < min_val) {
+                min_val = x;
             }
             if (x > max_val) {
                 max_val = x;
@@ -148,16 +182,17 @@ void write(const std::string& filename,
                 x += (*b)(u, v);
                 x += (*b)(u, buddhabrot::image_height - 1 - v);
             }
-            pimage[u][v] = png::gray_pixel_16(((1 << 16) - 1) *
-                                              std::sqrt(x / max_val / 2));
+            pimage[u][v] = png::gray_pixel_16(
+                ((1 << 16) - 2) *
+                std::sqrt((x - min_val) / (max_val - min_val)));
         }
     }
     pimage.write(filename);
 }
 
 int main() {
-    const idx n_threads = 24;
-    const idx iters = 1000;
+    const idx n_threads = 12;
+    const idx iters = 20000;
     std::vector<std::thread> threads;
     std::vector<std::unique_ptr<buddhabrot>> brots;
     for (idx i = 0; i < n_threads; i++) {
@@ -166,7 +201,7 @@ int main() {
             std::chrono::steady_clock::now().time_since_epoch().count() + i +
             rd();
         brots.emplace_back(
-            std::make_unique<buddhabrot>(iters, 144.0 * 8 / n_threads, seed));
+            std::make_unique<buddhabrot>(iters, 64, seed, n_threads, i));
     }
     threads.reserve(n_threads);
     for (idx i = 0; i < n_threads; i++) {
