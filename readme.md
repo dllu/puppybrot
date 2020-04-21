@@ -1,14 +1,28 @@
 High resolution Buddhabrot generator
 ====================================
 
+![pic](https://pics.dllu.net/file/dllu-pics/cubehelix_buddhabrot_512_16384_2000_1024.png)
+
 Requirements:
 
-* [`png++`](https://www.nongnu.org/pngpp/doc/0.2.0/)
+* [`png++`](https://www.nongnu.org/pngpp/)
 
 # Building
 
 ```
 g++ -Ofast -march=native -lpng -lpthread -o buddhabrot buddhabrot.cpp
+```
+
+or
+
+```
+clang++ -O3 -march=native -lpng -lpthread -o buddhabrot buddhabrot.cpp
+```
+
+## Optional: CubeHelix colouring
+
+```
+g++ -Ofast -march=native -lpng -o cubehelix cubehelix.cpp
 ```
 
 or
@@ -31,6 +45,8 @@ clang++ -O3 -march=native -lpng -lpthread -o buddhabrot buddhabrot.cpp
 The program will automatically output a 16-bit grayscale PNG image that is brightness-normalized and gamma-corrected.
 If it appears washed out, you can adjust the constrast in your preferred image editing program.
 The 16-bit depth is much more than conventional 8-bit images so you have lots of leeway to adjust the image.
+
+The program `cubehelix` will apply the [CubeHelix colour palette](http://www.mrao.cam.ac.uk/~dag/CUBEHELIX/) to output a cool-looking colourful image, with an option to adjust the contrast as needed.
 
 # Theory
 

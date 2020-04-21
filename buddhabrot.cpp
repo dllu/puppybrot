@@ -1,4 +1,3 @@
-#include <array>
 #include <chrono>
 #include <complex>
 #include <future>
@@ -6,6 +5,7 @@
 #include <png++/png.hpp>
 #include <random>
 #include <thread>
+#include <vector>
 
 using idx = std::ptrdiff_t;
 using pt = std::complex<double>;  // a point in real life
