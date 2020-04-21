@@ -12,12 +12,9 @@ using pt = std::complex<double>;  // a point in real life
 using px = std::pair<idx, idx>;   // pixel in the image
 
 class buddhabrot {
-   public:
-    static constexpr idx image_width = 16384;
-    static constexpr idx image_height = 16384;
-
    private:
     static constexpr double escape_radius2 = 8.0;
+    const idx image_size;
     const idx iterations;
     const idx max_samples;
     const idx stride;
@@ -50,24 +47,24 @@ class buddhabrot {
      */
     px to_px(const pt z) {
         return std::make_pair(
-            static_cast<idx>(image_height * (z.real() + 2) / 4),
-            static_cast<idx>(image_width * (z.imag() + 2) / 4));
+            static_cast<idx>(image_size * (z.real() + 2) / 4),
+            static_cast<idx>(image_size * (z.imag() + 2) / 4));
     }
 
     /**
      * convert pixel to point
      */
     pt to_pt(const px x) {
-        return pt(x.first * 4.0 / image_height - 2.0,
-                  x.second * 4.0 / image_width - 2.0);
+        return pt(x.first * 4.0 / image_size - 2.0,
+                  x.second * 4.0 / image_size - 2.0);
     }
 
     /**
      * check if a pixel is within bounds of the image
      */
     bool in_bounds(px y) {
-        return y.first >= 0 && y.second >= 0 && y.first < image_height &&
-               y.second < image_width;
+        return y.first >= 0 && y.second >= 0 && y.first < image_size &&
+               y.second < image_size;
     }
 
     /**
@@ -130,20 +127,22 @@ class buddhabrot {
     }
 
    public:
-    buddhabrot(const idx iterations_, const idx max_samples_, const idx seed,
-               const idx stride_ = 1, const idx stride_offset_ = 0)
-        : iterations(iterations_),
+    buddhabrot(const idx image_size_, const idx iterations_,
+               const idx max_samples_, const idx seed, const idx stride_ = 1,
+               const idx stride_offset_ = 0)
+        : image_size(image_size_),
+          iterations(iterations_),
           max_samples(max_samples_),
           stride(stride_),
           stride_offset(stride_offset_),
-          image(image_height, std::vector<double>(image_width, 0)),
+          image(image_size, std::vector<double>(image_size, 0)),
           buf(max_samples, std::vector<pt>(iterations)),
           buflen(max_samples),
           engine(seed) {}
 
     void render() {
-        for (idx u = stride_offset; u < image_height; u += stride) {
-            for (idx v = 0; v < image_width; v++) {
+        for (idx u = stride_offset; u < image_size; u += stride) {
+            for (idx v = 0; v < image_size; v++) {
                 pt a = to_pt(std::make_pair(u, v));
                 pt b = to_pt(std::make_pair(u + 1, v + 1));
                 render_region(bounds{a.real(), b.real(), a.imag(), b.imag()});
@@ -154,12 +153,17 @@ class buddhabrot {
     double operator()(idx u, idx v) const { return image[u][v]; }
 };
 
+/**
+ * combine the buddhabrots from all the different threads
+ * and write them to a png file
+ */
 void write(const std::string& filename,
-           const std::vector<std::unique_ptr<buddhabrot>>& brots) {
+           const std::vector<std::unique_ptr<buddhabrot>>& brots,
+           const idx image_size) {
     double max_val = 0;
     double min_val = std::numeric_limits<double>::infinity();
-    for (idx u = 0; u < buddhabrot::image_height; u++) {
-        for (idx v = 0; v < buddhabrot::image_width; v++) {
+    for (idx u = 0; u < image_size; u++) {
+        for (idx v = 0; v < image_size; v++) {
             double x = 0;
             for (auto& b : brots) {
                 x += (*b)(u, v);
@@ -173,36 +177,46 @@ void write(const std::string& filename,
         }
     }
 
-    png::image<png::gray_pixel_16> pimage(buddhabrot::image_width,
-                                          buddhabrot::image_height);
-    for (idx u = 0; u < buddhabrot::image_height; u++) {
-        for (idx v = 0; v < buddhabrot::image_width; v++) {
+    png::image<png::gray_pixel_16> pimage(image_size, image_size);
+    for (idx u = 0; u < image_size; u++) {
+        for (idx v = 0; v < image_size; v++) {
             double x = 0;
             for (auto& b : brots) {
                 x += (*b)(u, v);
-                x += (*b)(u, buddhabrot::image_height - 1 - v);
+                x += (*b)(u, image_size - 1 - v);
             }
             pimage[u][v] = png::gray_pixel_16(
-                ((1 << 16) - 2) *
-                std::sqrt((x - min_val) / (max_val - min_val)));
+                ((1 << 16) - 1) *
+                std::sqrt((x * 0.5 - min_val) / (max_val - min_val)));
         }
     }
     pimage.write(filename);
 }
 
-int main() {
-    const idx n_threads = 12;
-    const idx iters = 20000;
-    std::vector<std::thread> threads;
+int main(int argc, char** argv) {
+    if (argc != 5) {
+        std::cerr << "USAGE: buddhabrot image_size iterations num_threads "
+                     "max_samples_per_pixel\n"
+                  << "example: buddhabrot 1024 1000 12 64" << std::endl;
+        return 1;
+    }
+
+    const idx image_size = std::atoi(argv[1]);
+    const idx iterations = std::atoi(argv[2]);
+    const idx n_threads = std::atoi(argv[3]);
+    const idx max_samples = std::atoi(argv[4]);
+
     std::vector<std::unique_ptr<buddhabrot>> brots;
     for (idx i = 0; i < n_threads; i++) {
         std::random_device rd;
         auto seed =
             std::chrono::steady_clock::now().time_since_epoch().count() + i +
             rd();
-        brots.emplace_back(
-            std::make_unique<buddhabrot>(iters, 64, seed, n_threads, i));
+        brots.emplace_back(std::make_unique<buddhabrot>(
+            image_size, iterations, max_samples, seed, n_threads, i));
     }
+
+    std::vector<std::thread> threads;
     threads.reserve(n_threads);
     for (idx i = 0; i < n_threads; i++) {
         threads.emplace_back([=, &brots]() { brots[i]->render(); });
@@ -210,6 +224,10 @@ int main() {
     for (idx i = 0; i < n_threads; i++) {
         threads[i].join();
     }
-    write("brot.png", brots);
+    std::stringstream filename_ss;
+    filename_ss << "buddhabrot_" << image_size << "_" << iterations << "_"
+                << max_samples << ".png";
+    write(filename_ss.str(), brots, image_size);
+    return 0;
 }
 
