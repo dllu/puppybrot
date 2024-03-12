@@ -9,32 +9,32 @@ Generates high resolution pictures of the [Buddhabrot](https://en.wikipedia.org/
 
 ### Requirements
 
-* [`png++`](https://www.nongnu.org/pngpp/)
+* [`png++`](https://www.nongnu.org/pngpp/) (e.g. on Ubuntu, `sudo apt install libpng++-dev libpng-dev`)
 
 # Building
 
 On UNIX-like systems,
 
 ```
-g++ -Ofast -march=native -lpng -lpthread -o buddhabrot buddhabrot.cpp
+g++ buddhabrot.cpp -Ofast -march=native -lpng -lpthread -o buddhabrot
 ```
 
 or
 
 ```
-clang++ -O3 -march=native -lpng -lpthread -o buddhabrot buddhabrot.cpp
+clang++ buddhabrot.cpp -O3 -march=native -lpng -lpthread -o buddhabrot
 ```
 
 ## Optional: CubeHelix colouring
 
 ```
-g++ -Ofast -march=native -lpng -o cubehelix cubehelix.cpp
+g++ cubehelix.cpp -Ofast -march=native -lpng -o cubehelix
 ```
 
 or
 
 ```
-clang++ -O3 -march=native -lpng -lpthread -o buddhabrot buddhabrot.cpp
+clang++ buddhabrot.cpp -O3 -march=native -lpng -lpthread -o buddhabrot
 ```
 
 # Running
@@ -93,7 +93,7 @@ Finally, after sampling, the pixel values along the trajectory should be divided
 Although my code is not well optimized, on my computer it is able to generate a 1000 iteration 16384 x 16384 image with up to 128 samples per pixel within 4 minutes.
 
 ```
-g++ -Ofast -march=native -lpng -lpthread -o buddhabrot buddhabrot.cpp; and time ./buddhabrot 16384 1000 12 128
+g++ buddhabrot.cpp -Ofast -march=native -lpng -lpthread -o buddhabrot; and time ./buddhabrot 16384 1000 12 128
 
 ________________________________________________________
 Executed in  225.85 secs   fish           external
