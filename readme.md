@@ -22,7 +22,7 @@ g++ buddhabrot.cpp -Ofast -march=native -lpng -lpthread -o buddhabrot
 or
 
 ```
-clang++ buddhabrot.cpp -O3 -march=native -lpng -lpthread -o buddhabrot
+clang++ buddhabrot.cpp -Ofast -march=native -lpng -lpthread -o buddhabrot
 ```
 
 ## Optional: CubeHelix colouring

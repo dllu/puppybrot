@@ -8,18 +8,18 @@
 #include <vector>
 
 using idx = std::ptrdiff_t;
-using pt = std::complex<double>;  // a point in real life
+using pt = std::complex<float>;  // a point in real life
 using px = std::pair<idx, idx>;   // pixel in the image
 
 class buddhabrot {
    private:
-    static constexpr double escape_radius2 = 8.0;
+    static constexpr float escape_radius2 = 8.0;
     const idx image_size;
     const idx iterations;
     const idx max_samples;
     const idx stride;
     const idx stride_offset;
-    std::vector<std::vector<double>> image;
+    std::vector<float> image;
     std::vector<std::vector<pt>> buf;
     std::vector<idx> buflen;
     std::mt19937 engine;
@@ -28,16 +28,16 @@ class buddhabrot {
      * struct to represent a bounding box
      */
     struct bounds {
-        double ulo, uhi, vlo, vhi;
+        float ulo, uhi, vlo, vhi;
     };
 
     /**
      * sample a random point within bounding box
      */
     pt random_pt(const bounds& bb) {
-        std::uniform_real_distribution<double> uniform_dist_real(bb.ulo,
+        std::uniform_real_distribution<float> uniform_dist_real(bb.ulo,
                                                                  bb.uhi);
-        std::uniform_real_distribution<double> uniform_dist_imag(bb.vlo,
+        std::uniform_real_distribution<float> uniform_dist_imag(bb.vlo,
                                                                  bb.vhi);
         return pt(uniform_dist_real(engine), uniform_dist_imag(engine));
     }
@@ -92,8 +92,7 @@ class buddhabrot {
             for (idx i = 0; i < iterations; i++) {
                 z = z * z + c;
                 buf[trial][i] = z;
-                if (z.imag() * z.imag() + z.real() * z.real() >
-                    escape_radius2) {
+                if (std::norm(z) > escape_radius2) {
                     escaped_time = i;
                     break;
                 }
@@ -117,11 +116,11 @@ class buddhabrot {
             buflen[trial] = escaped_time;
         }
 
-        const double weight = 1.0 / samples;
+        const float weight = 1.0 / samples;
         for (idx trial = 0; trial < samples; trial++) {
             for (idx i = 0; i < buflen[trial]; i++) {
                 px y = to_px(buf[trial][i]);
-                if (in_bounds(y)) image[y.first][y.second] += weight;
+                if (in_bounds(y)) (*this)(y.first, y.second) += weight;
             }
         }
     }
@@ -135,7 +134,7 @@ class buddhabrot {
           max_samples(max_samples_),
           stride(stride_),
           stride_offset(stride_offset_),
-          image(image_size, std::vector<double>(image_size, 0)),
+          image(image_size * image_size, 0),
           buf(max_samples, std::vector<pt>(iterations)),
           buflen(max_samples),
           engine(seed) {}
@@ -150,7 +149,8 @@ class buddhabrot {
         }
     }
 
-    double operator()(idx u, idx v) const { return image[u][v]; }
+    float &operator()(idx u, idx v) { return image[u * image_size + v]; }
+    float operator()(idx u, idx v) const { return image[u * image_size + v]; }
 };
 
 /**
@@ -160,11 +160,11 @@ class buddhabrot {
 void write(const std::string& filename,
            const std::vector<std::unique_ptr<buddhabrot>>& brots,
            const idx image_size) {
-    double max_val = 0;
-    double min_val = std::numeric_limits<double>::infinity();
+    float max_val = 0;
+    float min_val = std::numeric_limits<float>::infinity();
     for (idx u = 0; u < image_size; u++) {
         for (idx v = 0; v < image_size; v++) {
-            double x = 0;
+            float x = 0;
             for (auto& b : brots) {
                 x += (*b)(u, v);
             }
@@ -180,7 +180,7 @@ void write(const std::string& filename,
     png::image<png::gray_pixel_16> pimage(image_size, image_size);
     for (idx u = 0; u < image_size; u++) {
         for (idx v = 0; v < image_size; v++) {
-            double x = 0;
+            float x = 0;
             for (auto& b : brots) {
                 x += (*b)(u, v);
                 x += (*b)(u, image_size - 1 - v);
